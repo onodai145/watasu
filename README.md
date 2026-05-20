@@ -9,7 +9,7 @@ WebRTC DataChannel によるブラウザ間 P2P ファイル転送アプリ。
 
 - **P2P 転送** — WebRTC DataChannel でファイルをチャンク分割転送。サーバーにデータは残らない
 - **認証済みユーザーのみ送信可** — 受信者はアカウント不要
-- **ローカルアカウント** — 管理者がサーバー側でユーザーを作成
+- **ローカルアカウント** — 管理者がサーバー側でユーザーを作成、または `ALLOW_REGISTRATION=true` でユーザー自己登録を有効化
 - **OIDC 認証** — Google・Keycloak・Auth0 など任意の OIDC プロバイダに対応
 - **ロール管理** — `user` / `admin` の 2 ロール
 - **2段階認証 (TOTP)** — Google Authenticator などの認証アプリに対応
@@ -102,6 +102,8 @@ http://localhost:3000 にアクセス。
 | `PORT` | リスンポート | `3000` |
 | `BASE_URL` | アプリのベース URL（OIDC リダイレクト URI に使用） | `http://localhost:3000` |
 | `SESSION_SECRET` | セッション署名キー（**本番では必ず変更**） | `dev-secret-...` |
+| `ALLOW_REGISTRATION` | `true` のときユーザー自己登録を有効化 | 無効 |
+| `ALLOWED_EMAIL_DOMAINS` | 登録を許可するドメイン（カンマ区切り。未設定時は制限なし） | 無制限 |
 
 ### リバースプロキシ
 
@@ -286,6 +288,7 @@ server {
 |---|---|
 | `GET /` | 誰でも（受信者として利用可能） |
 | `GET /login` | 誰でも |
+| `GET /register` | `ALLOW_REGISTRATION=true` のときのみ |
 | `GET /setup` | ユーザーが 0 人のときのみ |
 | WebSocket `role=sender` | ログイン済みユーザーのみ |
 | WebSocket `role=receiver` | 誰でも |
