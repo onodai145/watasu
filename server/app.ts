@@ -1,88 +1,69 @@
-import './session.d'
-import express, { RequestHandler } from 'express'
-import session from 'express-session'
-import pinoHttp from 'pino-http'
-import helmet from 'helmet'
-import rateLimit from 'express-rate-limit'
-import path from 'path'
+import { Hono } from 'hono'
+import type { Context } from 'hono'
+import { secureHeaders } from 'hono/secure-headers'
+import { logger as honoLogger } from 'hono/logger'
+import { serveStatic } from '@hono/node-server/serve-static'
+import { createAdaptorServer } from '@hono/node-server'
+import { getConnInfo } from '@hono/node-server/conninfo'
+import { useSession, useSessionStorage } from '@hono/session'
+import { rateLimiter } from 'hono-rate-limiter'
 import logger from './logger'
+import { sessionStorage, type AppEnv, type OurSessionData } from './session'
 import authRouter from './routes/auth'
 import apiRouter from './routes/api'
 import adminRouter from './routes/admin'
 
-const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret-change-in-production'
+export const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret-change-in-production'
 
-export const sessionParser = session({
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 8 * 60 * 60 * 1000,
-  },
-}) as RequestHandler
+const hono = new Hono<AppEnv>()
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' },
-  skip: () => process.env.NODE_ENV === 'test',
-})
-
-export const app = express()
-
-function parseTrustProxy(val: string | undefined): boolean | number | string | string[] {
-  if (val === undefined || val === '0' || val === 'false') return false
-  const n = Number(val)
-  if (!isNaN(n)) return n
-  const parts = val.split(',').map(s => s.trim()).filter(Boolean)
-  return parts.length === 1 ? parts[0] : parts
-}
-app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY))
-
-app.use(helmet({
+hono.use('*', secureHeaders({
   contentSecurityPolicy: {
-    directives: {
-      defaultSrc:     ["'self'"],
-      scriptSrc:      ["'self'", "'unsafe-inline'"],
-      styleSrc:       ["'self'", "'unsafe-inline'"],
-      imgSrc:         ["'self'", "data:", "https:"],
-      connectSrc:     ["'self'", "wss:", "ws:"],
-      fontSrc:        ["'self'"],
-      objectSrc:      ["'none'"],
-      frameAncestors: ["'none'"],
-    },
+    defaultSrc:     ["'self'"],
+    scriptSrc:      ["'self'", "'unsafe-inline'"],
+    styleSrc:       ["'self'", "'unsafe-inline'"],
+    imgSrc:         ["'self'", "data:", "https:"],
+    connectSrc:     ["'self'", "wss:", "ws:"],
+    fontSrc:        ["'self'"],
+    objectSrc:      ["'none'"],
+    frameAncestors: ["'none'"],
   },
   crossOriginEmbedderPolicy: false,
 }))
 
-app.use(sessionParser)
-app.use(pinoHttp({
-  logger,
-  autoLogging: { ignore: (req) => /\.(css|js|ico|png|woff2?)(\?.*)?$/.test(req.url ?? '') },
-  customLogLevel: (_req, res, err) => {
-    if (err || res.statusCode >= 500) return 'error'
-    if (res.statusCode >= 400) return 'warn'
-    return 'info'
-  },
-  customProps: (req) => ({
-    ...((req as express.Request).session?.user?.name && { user: (req as express.Request).session.user!.name }),
-  }),
-  serializers: {
-    req: (req) => ({ method: req.method, url: req.url }),
-    res: (res) => ({ statusCode: res.statusCode }),
-  },
+const logMiddleware = honoLogger((message) => logger.info(message))
+hono.use('*', async (c, next) => {
+  if (/\.(css|js|ico|png|woff2?)(\?.*)?$/.test(c.req.path)) return next()
+  return logMiddleware(c, next)
+})
+
+function getClientIp(c: Context): string {
+  try { return getConnInfo(c).remote.address ?? '' }
+  catch { return c.req.header('x-forwarded-for')?.split(',')[0].trim() ?? '' }
+}
+
+const authLimiter = rateLimiter({
+  windowMs:        15 * 60 * 1000,
+  limit:           20,
+  standardHeaders: 'draft-6',
+  keyGenerator:    (c) => getClientIp(c),
+  skip:            () => process.env.NODE_ENV === 'test',
+})
+hono.use('/auth/local/login', authLimiter)
+hono.use('/auth/totp/verify', authLimiter)
+hono.use('/setup',            authLimiter)
+
+hono.use('*', useSessionStorage(sessionStorage))
+hono.use('*', useSession<OurSessionData>({
+  secret:   SESSION_SECRET,
+  duration: { absolute: 8 * 60 * 60 },
 }))
-app.use(express.json())
-app.use(express.urlencoded({ extended: false }))
-app.use('/auth/local/login', authLimiter)
-app.use('/auth/totp/verify', authLimiter)
-app.use('/setup',            authLimiter)
-app.use(adminRouter)
-app.use(authRouter)
-app.use(express.static(path.join(__dirname, '../public')))
-app.use(apiRouter)
+
+hono.route('/', adminRouter)
+hono.route('/', authRouter)
+hono.route('/', apiRouter)
+
+hono.use('*', serveStatic({ root: './public' }))
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const app = createAdaptorServer({ fetch: (req, env) => hono.fetch(req, env) }) as any as import('http').Server

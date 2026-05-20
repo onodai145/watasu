@@ -7,7 +7,7 @@
 ```bash
 pnpm install          # 依存関係のインストール（client/ も含む）
 pnpm migrate          # DB設定反映（DATABASE_URLからprovider自動検出 → prisma db push）
-pnpm start            # Express サーバー起動（tsx で TypeScript を直接実行）
+pnpm start            # Hono サーバー起動（tsx で TypeScript を直接実行）
 pnpm dev              # ウォッチモードで起動（ファイル変更時に自動再起動）
 pnpm typecheck        # バックエンドの型チェック（tsc --noEmit）
 pnpm build:ui         # Vue フロントエンドをビルドして public/spa/ に出力
@@ -24,7 +24,7 @@ pnpm vitest run tests/integration/auth.test.ts
 
 フロントエンド開発（HMR あり）:
 ```bash
-# ターミナル1: Express サーバー
+# ターミナル1: Hono サーバー
 pnpm dev
 
 # ターミナル2: Vite 開発サーバー（http://localhost:5173）
@@ -43,8 +43,8 @@ WebRTC P2P ファイル転送アプリ。ファイルデータはサーバーを
 
 **リクエストフロー:**
 1. `server/index.ts` — エントリーポイント: `.env` 読み込み・DB マイグレーション実行・OIDC 初期化・HTTP サーバー起動・WebSocket アタッチ
-2. `server/app.ts` — セッション・helmet・レートリミット・3つのルーターを持つ Express アプリ
-3. `server/ws.ts` — WebSocket シグナリングサーバー。`app.ts` から渡された `sessionParser` で Express セッションを共有
+2. `server/app.ts` — `secureHeaders`・`hono/logger`・`hono-rate-limiter`・`@hono/session`・3つのルーターを持つ Hono アプリ。`createAdaptorServer` で `http.Server` として export
+3. `server/ws.ts` — WebSocket シグナリングサーバー。`server/session.ts` の `getSessionFromRequest` で JWE Cookie を復号してセッションを共有
 
 **ルーター** (`server/routes/`):
 - `auth.ts` — OIDC フロー (`/auth/login`, `/auth/callback`, `/auth/logout`) + ローカルログイン (`POST /auth/local/login`) + TOTP 認証 (`/auth/totp/verify`) + 初回セットアップ (`/setup`) — 認証系 GET ルートはすべて `public/spa/index.html` を配信
@@ -57,7 +57,7 @@ WebRTC P2P ファイル転送アプリ。ファイルデータはサーバーを
 - ローカルユーザー: bcrypt パスワード + 任意の TOTP（otplib）。`server/users.ts` の `safeUser()` が `password_hash`・`totp_secret` を返却オブジェクトから除去する。
 - OIDC ユーザー: セッションのみ・DB レコードなし — TOTP やプロフィール変更は不可。
 - ロールは `user`（WebSocket で送信可能）と `admin`（ユーザー管理）の 2 種類。
-- セッション固定攻撃対策のため、ログイン時と TOTP 検証時にセッションを再生成する。
+- セッションは `@hono/session`（JWE 暗号化 Cookie + サーバーサイド Map ストア）で管理。`server/session.ts` に型・ストア・WebSocket 用復号ヘルパーをまとめている。
 
 **WebSocket シグナリング (`server/ws.ts`):** ルームベース（1ルーム最大 2 ピア）。`sender` ロールには有効なセッションが必要、`receiver` は匿名可。`offer`・`answer`・`ice` メッセージをピア間でリレーする。空になったルームは削除される。
 
@@ -69,11 +69,11 @@ WebRTC P2P ファイル転送アプリ。ファイルデータはサーバーを
   - `client/src/views/` — ページコンポーネント（`AdminView`・`LoginView`・`TotpView`・`SetupView`）
   - `client/src/services/api.ts` — ジェネリック fetch ラッパー
 
-**SPA と Express の認証境界:** HTML の配信は Express が引き続きルートガード（`requireAdmin`・`requireSetup`）で保護する。SPA 側は Vue Router の `beforeEach` でも API 呼び出しにより認証を確認する。API エンドポイントは常に Express 側で認証チェックを行う。
+**SPA と Hono の認証境界:** HTML の配信は Hono が引き続きルートガード（`requireAdmin`・`requireSetup`）で保護する。SPA 側は Vue Router の `beforeEach` でも API 呼び出しにより認証を確認する。API エンドポイントは常に Hono 側で認証チェックを行う。
 
 ## テスト
 
-supertest を使いインメモリ SQLite の実 Express アプリに対してテストを行う。DB のモックは使用しない。テストヘルパー (`tests/helpers/db.ts`) が `setup` / `teardown` / `reset` を提供し、`beforeAll`/`afterAll`/`beforeEach` で使用する。
+supertest を使いインメモリ SQLite の実 Hono アプリ（`http.Server` として export）に対してテストを行う。DB のモックは使用しない。テストヘルパー (`tests/helpers/db.ts`) が `setup` / `teardown` / `reset` を提供し、`beforeAll`/`afterAll`/`beforeEach` で使用する。
 
 SPA 移行後、HTML の内容チェックは `<div id="app">` の存在確認に変更済み（コンテンツはクライアント側でレンダリングされるため）。
 

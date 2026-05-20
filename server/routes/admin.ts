@@ -1,60 +1,75 @@
-import express, { Request, Response, NextFunction } from 'express'
 import path from 'path'
+import { readFileSync } from 'fs'
+import { Hono } from 'hono'
+import type { Context, Next } from 'hono'
 import { Prisma } from '@prisma/client'
 import logger from '../logger'
 import * as users from '../users'
 import { prisma } from '../prisma'
 import oidc from '../oidc'
+import { UserError } from '../errors'
+import type { AppEnv } from '../session'
 
 const SPA_PAGE = path.join(__dirname, '../../public/spa/index.html')
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000'
-const router   = express.Router()
+
+function sendSpa(c: Context<AppEnv>): Response {
+  try {
+    return c.html(readFileSync(SPA_PAGE, 'utf8'))
+  } catch {
+    return c.text('Frontend not built. Run pnpm build:ui', 503)
+  }
+}
 
 async function noUsersExist(): Promise<boolean> {
   return (await prisma.user.count()) === 0
 }
 
-async function requireSetup(_req: Request, res: Response, next: NextFunction): Promise<void> {
+async function requireSetup(c: Context<AppEnv>, next: Next): Promise<void | Response> {
   if (process.env.NODE_ENV !== 'production' || await noUsersExist()) return next()
-  res.redirect('/')
+  return c.redirect('/')
 }
 
-router.get('/setup', requireSetup, (_req, res) => res.sendFile(SPA_PAGE))
+async function requireAdmin(c: Context<AppEnv>, next: Next): Promise<void | Response> {
+  const data = await c.var.session.get()
+  if (data?.user?.role === 'admin') return next()
+  if (c.req.path.startsWith('/admin/api/')) return c.json({ error: 'Forbidden' }, 403)
+  return c.redirect(data?.user ? '/' : '/login')
+}
 
-router.post('/setup', requireSetup, async (req, res) => {
-  const { username, displayName, password } = req.body as {
-    username?: string; displayName?: string; password?: string
-  }
-  if (!username || !password) return void res.redirect('/setup?error=missing')
+const router = new Hono<AppEnv>()
+
+router.get('/setup', requireSetup, (c) => sendSpa(c))
+
+router.post('/setup', requireSetup, async (c) => {
+  const body        = await c.req.parseBody()
+  const username    = body['username']    as string | undefined
+  const displayName = body['displayName'] as string | undefined
+  const password    = body['password']    as string | undefined
+  if (!username || !password) return c.redirect('/setup?error=missing')
   try {
     const user = await users.createUser({ username, displayName, password, role: 'admin' })
-    req.session.user = { sub: `local:${user.id}`, name: user.display_name, email: user.email, picture: null, role: user.role }
+    await c.var.session.update({
+      user: { sub: `local:${user.id}`, name: user.display_name, email: user.email, picture: null, role: user.role },
+    })
     logger.info({ username: user.username }, 'setup: first admin created')
-    res.redirect('/admin/users')
+    return c.redirect('/admin/users')
   } catch (err) {
     logger.error({ err: (err as Error).message }, 'setup: failed')
-    res.redirect('/setup?error=failed')
+    return c.redirect('/setup?error=failed')
   }
 })
 
-function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (req.session.user?.role === 'admin') return next()
-  if (req.path.startsWith('/admin/api/')) {
-    res.status(403).json({ error: 'Forbidden' })
-    return
-  }
-  res.redirect(req.session.user ? '/' : '/login')
-}
+router.get('/admin/users',  requireAdmin, (c) => sendSpa(c))
+router.get('/admin/server', requireAdmin, (c) => sendSpa(c))
 
-router.get('/admin/users', requireAdmin, (_req, res) => res.sendFile(SPA_PAGE))
-router.get('/admin/server', requireAdmin, (_req, res) => res.sendFile(SPA_PAGE))
+router.get('/admin/api/me', requireAdmin, async (c) => {
+  const data = await c.var.session.get()
+  return c.json({ sub: data?.user?.sub ?? null })
+})
 
-router.get('/admin/api/me', requireAdmin, (req, res) =>
-  res.json({ sub: req.session.user?.sub ?? null })
-)
-
-router.get('/admin/api/server', requireAdmin, (_req, res) =>
-  res.json({
+router.get('/admin/api/server', requireAdmin, (c) =>
+  c.json({
     db:          process.env.DB_CLIENT ?? 'better-sqlite3',
     dbPath:      (!process.env.DB_CLIENT || process.env.DB_CLIENT === 'better-sqlite3')
                    ? (process.env.DB_PATH ?? './data/app.db') : null,
@@ -65,51 +80,58 @@ router.get('/admin/api/server', requireAdmin, (_req, res) =>
   })
 )
 
-router.get('/admin/api/users', requireAdmin, async (_req, res) =>
-  res.json(await users.listUsers())
+router.get('/admin/api/users', requireAdmin, async (c) =>
+  c.json(await users.listUsers())
 )
 
-router.post('/admin/api/users', requireAdmin, async (req, res) => {
-  const { username, displayName, email, password, role } = req.body as {
-    username?: string; displayName?: string; email?: string; password?: string; role?: string
-  }
+router.post('/admin/api/users', requireAdmin, async (c) => {
+  const body = await c.req.json<{ username?: string; displayName?: string; email?: string; password?: string; role?: string }>()
+  const { username, displayName, email, password, role } = body
   if (!username || !password)
-    return void res.status(400).json({ error: 'username と password は必須です' })
+    return c.json({ error: 'username と password は必須です' }, 400)
   try {
+    const data = await c.var.session.get()
     const user = await users.createUser({ username, displayName, email, password, role })
-    logger.info({ username: user.username, role: user.role, by: req.session.user!.name }, 'admin: user created')
-    res.status(201).json(user)
+    logger.info({ username: user.username, role: user.role, by: data?.user?.name }, 'admin: user created')
+    return c.json(user, 201)
   } catch (err) {
-    const msg = (err as Error).message
     const isDuplicate = (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')
-      || msg.includes('UNIQUE') || (err as { code?: string }).code === '23505'
-    res.status(isDuplicate ? 409 : 500).json({ error: isDuplicate ? 'ユーザー名が既に存在します' : msg })
+      || (err instanceof Error && (err.message.includes('UNIQUE') || (err as { code?: string }).code === '23505'))
+    if (isDuplicate) return c.json({ error: 'ユーザー名が既に存在します' }, 409)
+    if (err instanceof UserError) return c.json({ error: err.message }, 400)
+    logger.error({ err }, 'admin: user create failed')
+    return c.json({ error: 'サーバーエラーが発生しました' }, 500)
   }
 })
 
-router.patch('/admin/api/users/:id', requireAdmin, async (req, res) => {
-  const id = String(req.params['id'])
-  if (req.body.role !== undefined && req.session.user?.sub === `local:${id}`) {
-    return void res.status(400).json({ error: '自分自身のロールは変更できません' })
+router.patch('/admin/api/users/:id', requireAdmin, async (c) => {
+  const id   = String(c.req.param('id'))
+  const body = await c.req.json<Record<string, unknown>>()
+  const data = await c.var.session.get()
+  if (body['role'] !== undefined && data?.user?.sub === `local:${id}`) {
+    return c.json({ error: '自分自身のロールは変更できません' }, 400)
   }
   try {
-    const user = await users.updateUser(id, req.body)
-    if (!user) return void res.status(404).json({ error: 'Not found' })
-    logger.info({ userId: id, changes: Object.keys(req.body), by: req.session.user!.name }, 'admin: user updated')
-    res.json(user)
+    const user = await users.updateUser(id, body as Parameters<typeof users.updateUser>[1])
+    if (!user) return c.json({ error: 'Not found' }, 404)
+    logger.info({ userId: id, changes: Object.keys(body), by: data?.user?.name }, 'admin: user updated')
+    return c.json(user)
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message })
+    if (err instanceof UserError) return c.json({ error: err.message }, 400)
+    logger.error({ err }, 'admin: user update failed')
+    return c.json({ error: 'サーバーエラーが発生しました' }, 500)
   }
 })
 
-router.delete('/admin/api/users/:id', requireAdmin, async (req, res) => {
-  const id = String(req.params['id'])
-  if (req.session.user?.sub === `local:${id}`)
-    return void res.status(400).json({ error: '自分自身は削除できません' })
+router.delete('/admin/api/users/:id', requireAdmin, async (c) => {
+  const id   = String(c.req.param('id'))
+  const data = await c.var.session.get()
+  if (data?.user?.sub === `local:${id}`)
+    return c.json({ error: '自分自身は削除できません' }, 400)
   const deleted = await users.deleteUser(id)
-  if (!deleted) return void res.status(404).json({ error: 'Not found' })
-  logger.info({ userId: id, by: req.session.user!.name }, 'admin: user deleted')
-  res.json({ ok: true })
+  if (!deleted) return c.json({ error: 'Not found' }, 404)
+  logger.info({ userId: id, by: data?.user?.name }, 'admin: user deleted')
+  return c.json({ ok: true })
 })
 
 export default router
