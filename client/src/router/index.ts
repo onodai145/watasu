@@ -5,6 +5,7 @@ import TotpView     from '../views/TotpView.vue'
 import SetupView    from '../views/SetupView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import ServerView   from '../views/ServerView.vue'
+import RegisterView from '../views/RegisterView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -19,6 +20,7 @@ const router = createRouter({
   routes: [
     { path: '/login',      component: LoginView,    meta: { bodyClass: 'center-page' } },
     { path: '/login/totp', component: TotpView,     meta: { bodyClass: 'center-page' } },
+    { path: '/register',   component: RegisterView, meta: { bodyClass: 'center-page' } },
     { path: '/setup',      component: SetupView,    meta: { bodyClass: 'center-page' } },
     { path: '/admin/users',  component: AdminView,    meta: { requiresAdmin: true } },
     { path: '/admin/server', component: ServerView,   meta: { requiresAdmin: true } },

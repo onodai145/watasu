@@ -51,6 +51,7 @@ const authLimiter = rateLimiter({
 })
 hono.use('/auth/local/login', authLimiter)
 hono.use('/auth/totp/verify', authLimiter)
+hono.use('/auth/register',   authLimiter)
 hono.use('/setup',            authLimiter)
 
 hono.use('*', useSessionStorage(sessionStorage))
