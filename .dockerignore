@@ -1,0 +1,9 @@
+node_modules/
+.env
+data/
+logs/
+.git/
+.gitignore
+*.md
+package-lock.json
+npm-debug.log*
