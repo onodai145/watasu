@@ -66,7 +66,7 @@ router.get('/auth/logout', async (c) => {
 router.get('/login',    (c) => sendSpa(c))
 
 router.get('/register', (c) => {
-  if (!process.env.ALLOW_REGISTRATION) return c.redirect('/login')
+  if (process.env.ALLOW_REGISTRATION !== 'true') return c.redirect('/login')
   return sendSpa(c)
 })
 
@@ -105,16 +105,16 @@ router.get('/login/totp', async (c) => {
 })
 
 router.post('/auth/register', async (c) => {
-  if (!process.env.ALLOW_REGISTRATION) return c.json({ error: '登録は無効です' }, 403)
+  if (process.env.ALLOW_REGISTRATION !== 'true') return c.json({ error: '登録は無効です' }, 403)
   const body = await c.req.json<{ username?: string; email?: string; password?: string }>()
   const { username, email, password } = body
   if (!username || !email || !password)
     return c.json({ error: 'すべての項目を入力してください' }, 400)
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return c.json({ error: 'メールアドレスの形式が正しくありません' }, 400)
-  const allowedDomains = process.env.ALLOWED_EMAIL_DOMAINS?.split(',').map(d => d.trim()).filter(Boolean)
+  const allowedDomains = process.env.ALLOWED_EMAIL_DOMAINS?.split(',').map(d => d.trim().toLowerCase()).filter(Boolean)
   if (allowedDomains?.length) {
-    const domain = email.split('@')[1]
+    const domain = email.split('@')[1].toLowerCase()
     if (!allowedDomains.includes(domain))
       return c.json({ error: `登録できないドメインです（許可: ${allowedDomains.join(', ')}）` }, 400)
   }

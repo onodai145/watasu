@@ -29,7 +29,7 @@ router.get('/api/ice-servers', (c) => {
 router.get('/api/me', async (c) => {
   const data = await c.var.session.get()
   if (!data?.user) {
-    return c.json({ authenticated: false, oidcAvailable: !!oidc.client, registrationEnabled: !!process.env.ALLOW_REGISTRATION })
+    return c.json({ authenticated: false, oidcAvailable: !!oidc.client, registrationEnabled: process.env.ALLOW_REGISTRATION === 'true' })
   }
   const user = { ...data.user } as Record<string, unknown>
   if ((user['sub'] as string)?.startsWith('local:')) {
