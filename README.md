@@ -1,6 +1,6 @@
 # Watasu
 
-> 🤖 Built with [Claude Code](https://claude.ai/code)
+> 🤖 Built with [Claude Code](https://claude.ai/code) — [MIT License](./LICENSE)
 
 WebRTC DataChannel によるブラウザ間 P2P ファイル転送アプリ。  
 ファイルはサーバーを経由せず直接送受信されます。
