@@ -63,7 +63,12 @@ router.get('/auth/logout', async (c) => {
   return c.redirect('/')
 })
 
-router.get('/login', (c) => sendSpa(c))
+router.get('/login',    (c) => sendSpa(c))
+
+router.get('/register', (c) => {
+  if (!process.env.ALLOW_REGISTRATION) return c.redirect('/login')
+  return sendSpa(c)
+})
 
 router.get('/settings', async (c) => {
   const data = await c.var.session.get()
@@ -97,6 +102,38 @@ router.get('/login/totp', async (c) => {
   const data = await c.var.session.get()
   if (!data?.pendingUserId) return c.redirect('/login')
   return sendSpa(c)
+})
+
+router.post('/auth/register', async (c) => {
+  if (!process.env.ALLOW_REGISTRATION) return c.json({ error: '登録は無効です' }, 403)
+  const body = await c.req.json<{ username?: string; email?: string; password?: string }>()
+  const { username, email, password } = body
+  if (!username || !email || !password)
+    return c.json({ error: 'すべての項目を入力してください' }, 400)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return c.json({ error: 'メールアドレスの形式が正しくありません' }, 400)
+  const allowedDomains = process.env.ALLOWED_EMAIL_DOMAINS?.split(',').map(d => d.trim()).filter(Boolean)
+  if (allowedDomains?.length) {
+    const domain = email.split('@')[1]
+    if (!allowedDomains.includes(domain))
+      return c.json({ error: `登録できないドメインです（許可: ${allowedDomains.join(', ')}）` }, 400)
+  }
+  if (password.length < 6)
+    return c.json({ error: 'パスワードは6文字以上にしてください' }, 400)
+  try {
+    const user = await users.createUser({ username, email, password, role: 'user' })
+    await c.var.session.update({
+      user: { sub: `local:${user.id}`, name: user.display_name, email: user.email, picture: null, role: user.role },
+    })
+    logger.info({ username: user.username }, 'auth: registered')
+    return c.json({ ok: true })
+  } catch (err) {
+    const msg = (err as Error).message
+    if (msg.includes('UNIQUE') || msg.includes('already exists'))
+      return c.json({ error: 'このユーザー名は既に使われています' }, 409)
+    logger.error({ err }, 'auth: register failed')
+    return c.json({ error: 'サーバーエラーが発生しました' }, 500)
+  }
 })
 
 router.get('/auth/totp/cancel', (c) => {

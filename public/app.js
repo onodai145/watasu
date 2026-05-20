@@ -83,7 +83,7 @@
       ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
     }
 
-    renderAuth(me);
+    renderAuth(me, me.registrationEnabled);
 
     if (new URLSearchParams(location.search).get('auth_error')) {
       showToast('認証に失敗しました。再度お試しください。', 'error');
@@ -99,7 +99,7 @@
   }
 
   // --- Auth rendering ---
-  function renderAuth(me) {
+  function renderAuth(me, registrationEnabled) {
     if (me.authenticated) {
       const { name, email, picture, role } = me.user;
       const initial = (name || email || '?')[0].toUpperCase();
@@ -156,11 +156,11 @@
       `;
       document.getElementById('btn-create').addEventListener('click', createRoom);
     } else {
-      authArea.innerHTML = `<a href="/login" class="btn btn-primary btn-sm">ログイン</a>`;
-      sendAuthUi.innerHTML = `
-        <p class="send-hint">ファイルを送るにはログインが必要です</p>
-        <a href="/login" class="btn btn-primary btn-block">ログインして送信</a>
-      `;
+      authArea.innerHTML = registrationEnabled
+        ? `<a href="/login"    class="btn btn-primary btn-sm">ログイン</a>
+           <a href="/register" class="btn btn-secondary btn-sm">新規登録</a>`
+        : `<a href="/login" class="btn btn-primary btn-sm">ログイン</a>`;
+      sendAuthUi.innerHTML = `<p class="send-hint">ファイルを送るにはログインが必要です</p>`;
     }
   }
 
