@@ -1,5 +1,7 @@
 # Watasu
 
+> 🤖 Built with [Claude Code](https://claude.ai/code)
+
 WebRTC DataChannel によるブラウザ間 P2P ファイル転送アプリ。  
 ファイルはサーバーを経由せず直接送受信されます。
 
@@ -26,7 +28,7 @@ WebRTC DataChannel によるブラウザ間 P2P ファイル転送アプリ。
 ```bash
 pnpm migrate    # DB スキーマ適用（初回・DATABASE_URL 変更後に実行）
 
-# ターミナル1: Express サーバー（ファイル変更時に自動再起動）
+# ターミナル1: Hono サーバー（ファイル変更時に自動再起動）
 pnpm dev
 
 # ターミナル2: Vite 開発サーバー（HMR）
@@ -231,15 +233,16 @@ server {
 ## ファイル構成
 
 ```
-├── server/                    # Express サーバー（TypeScript）
+├── server/                    # Hono サーバー（TypeScript）
 │   ├── index.ts               # エントリーポイント（HTTP サーバー起動）
-│   ├── app.ts                 # Express アプリ（ミドルウェア・ルーティング）
+│   ├── app.ts                 # Hono アプリ（ミドルウェア・ルーティング）
+│   ├── session.ts             # セッション管理（@hono/session + WebSocket 用復号）
+│   ├── errors.ts              # UserError（ユーザー向けエラークラス）
 │   ├── ws.ts                  # WebSocket シグナリングサーバー
 │   ├── prisma.ts              # Prisma Client シングルトン
 │   ├── users.ts               # ユーザー CRUD・パスワード認証・TOTP
 │   ├── oidc.ts                # OIDC クライアント初期化
 │   ├── logger.ts              # Pino ロガー設定
-│   ├── session.d.ts           # express-session 型拡張
 │   └── routes/
 │       ├── auth.ts            # 認証ルート（ローカル・OIDC・TOTP）
 │       ├── api.ts             # REST API（/api/me・ICE サーバー・TOTP 管理）
