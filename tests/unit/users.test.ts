@@ -158,4 +158,13 @@ describe('TOTP', () => {
     await users.enableTotp(u.id, secret, authenticator.generate(secret));
     expect(await users.verifyTotpToken(u.id, '000000')).toBe(false);
   });
+
+  it('同じコードを2回使うと2回目は拒否（リプレイ防止）', async () => {
+    const u = await users.createUser({ username: 'alice', password: 'pass1234' });
+    const secret = users.generateTotpSecret();
+    await users.enableTotp(u.id, secret, authenticator.generate(secret));
+    const token = authenticator.generate(secret);
+    expect(await users.verifyTotpToken(u.id, token)).toBe(true);
+    expect(await users.verifyTotpToken(u.id, token)).toBe(false);
+  });
 });

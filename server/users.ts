@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { authenticator } from 'otplib'
 import { prisma } from './prisma'
+import { UserError } from './errors'
 import type { User } from '@prisma/client'
 
 export type { User }
@@ -75,17 +76,19 @@ export async function deleteUser(id: string): Promise<boolean> {
 
 export async function changePassword(id: string, currentPassword: string, newPassword: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id } })
-  if (!user) throw new Error('ユーザーが見つかりません')
+  if (!user) throw new UserError('ユーザーが見つかりません')
   const ok = await bcrypt.compare(currentPassword, user.password_hash ?? '')
-  if (!ok) throw new Error('現在のパスワードが正しくありません')
+  if (!ok) throw new UserError('現在のパスワードが正しくありません')
   await prisma.user.update({ where: { id }, data: { password_hash: await bcrypt.hash(newPassword, BCRYPT_ROUNDS) } })
 }
 
+// Dummy hash ensures bcrypt runs even for unknown usernames (prevents timing-based enumeration)
+const DUMMY_HASH = '$2b$12$dummy.hash.to.prevent.timing.attack.on.username.enum'
+
 export async function verifyPassword(username: string, password: string): Promise<SafeUser | null> {
   const user = await prisma.user.findFirst({ where: { username, enabled: true } })
-  if (!user) return null
-  const ok = await bcrypt.compare(password, user.password_hash ?? '')
-  if (!ok) return null
+  const ok = await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH)
+  if (!user || !ok) return null
   const { password_hash: _ph, totp_secret: _ts, ...safe } = user
   return safe
 }
@@ -94,21 +97,36 @@ export function generateTotpSecret(): string {
   return authenticator.generateSecret()
 }
 
+// TOTP リプレイ防止: 使用済みトークンを 90 秒間保持
+const _usedTotpTokens = new Map<string, number>()
+setInterval(() => {
+  const now = Date.now()
+  for (const [k, exp] of _usedTotpTokens) if (exp <= now) _usedTotpTokens.delete(k)
+}, 30_000).unref()
+
+function consumeTotpToken(scope: string, token: string): boolean {
+  const key = `${scope}:${token}`
+  if (_usedTotpTokens.has(key)) return false
+  _usedTotpTokens.set(key, Date.now() + 90_000)
+  return true
+}
+
 export async function enableTotp(id: string, secret: string, token: string): Promise<void> {
-  if (!authenticator.verify({ token, secret })) throw new Error('コードが正しくありません')
+  if (!authenticator.verify({ token, secret })) throw new UserError('コードが正しくありません')
   await prisma.user.update({ where: { id }, data: { totp_secret: secret, totp_enabled: true } })
 }
 
 export async function disableTotp(id: string, token: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id } })
-  if (!user?.totp_enabled) throw new Error('2段階認証は有効ではありません')
+  if (!user?.totp_enabled) throw new UserError('2段階認証は有効ではありません')
   if (!authenticator.verify({ token, secret: user.totp_secret! }))
-    throw new Error('コードが正しくありません')
+    throw new UserError('コードが正しくありません')
   await prisma.user.update({ where: { id }, data: { totp_secret: null, totp_enabled: false } })
 }
 
 export async function verifyTotpToken(userId: string, token: string): Promise<boolean> {
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (!user?.totp_enabled || !user.totp_secret) return false
-  return authenticator.verify({ token, secret: user.totp_secret })
+  if (!authenticator.verify({ token, secret: user.totp_secret })) return false
+  return consumeTotpToken(userId, token)
 }

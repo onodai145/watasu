@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws'
-import { IncomingMessage, Server } from 'http'
-import { RequestHandler } from 'express'
+import type { IncomingMessage, Server } from 'http'
 import logger from './logger'
+import { getSessionFromRequest } from './session'
 
 interface AppWebSocket extends WebSocket {
   user:   { sub: string; name: string } | null
@@ -9,23 +9,25 @@ interface AppWebSocket extends WebSocket {
   role:   string | null
 }
 
-export function setupWS(server: Server, sessionParser: RequestHandler): void {
+export function setupWS(server: Server, secret: string): void {
   const wss   = new WebSocketServer({ noServer: true })
   const rooms = new Map<string, Set<AppWebSocket>>()
 
   server.on('upgrade', (req: IncomingMessage, socket, head) => {
-    sessionParser(req as Parameters<RequestHandler>[0], {} as Parameters<RequestHandler>[1], () => {
-      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
-    })
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req))
   })
 
-  wss.on('connection', (ws: AppWebSocket, req: IncomingMessage) => {
-    const session = (req as unknown as { session?: { user?: AppWebSocket['user'] } }).session
-    ws.user   = session?.user ?? null
+  wss.on('connection', async (ws: AppWebSocket, req: IncomingMessage) => {
+    const sessionData = await getSessionFromRequest(req, secret)
+    ws.user   = sessionData?.user ? { sub: sessionData.user.sub, name: sessionData.user.name } : null
     ws.roomId = null
     ws.role   = null
 
     ws.on('message', (raw) => {
+      if ((raw as Buffer).byteLength > 64 * 1024) {
+        ws.send(JSON.stringify({ type: 'error', code: 'message_too_large', message: 'メッセージが大きすぎます' }))
+        return
+      }
       let msg: Record<string, string>
       try { msg = JSON.parse(raw.toString()) } catch { return }
 

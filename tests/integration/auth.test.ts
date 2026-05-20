@@ -110,4 +110,36 @@ describe('TOTP ログインフロー', () => {
     const res = await agent.post('/auth/totp/verify').type('form').send({ token: '000000' });
     expect(res.headers.location).toBe('/login/totp?error=1');
   });
+
+  it('TOTP コードのリプレイは拒否される', async () => {
+    const u = await users.createUser({ username: 'alice', password: 'pass1234' });
+    const secret = users.generateTotpSecret();
+    await users.enableTotp(u.id, secret, authenticator.generate(secret));
+    const token = authenticator.generate(secret);
+
+    const agent1 = request.agent(app);
+    await agent1.post('/auth/local/login').type('form').send({ username: 'alice', password: 'pass1234' });
+    const res1 = await agent1.post('/auth/totp/verify').type('form').send({ token });
+    expect(res1.headers.location).toBe('/');
+
+    const agent2 = request.agent(app);
+    await agent2.post('/auth/local/login').type('form').send({ username: 'alice', password: 'pass1234' });
+    const res2 = await agent2.post('/auth/totp/verify').type('form').send({ token });
+    expect(res2.headers.location).toBe('/login/totp?error=1');
+  });
+
+  it('無効化ユーザーは TOTP 検証を完了できない', async () => {
+    const u = await users.createUser({ username: 'alice', password: 'pass1234' });
+    const secret = users.generateTotpSecret();
+    await users.enableTotp(u.id, secret, authenticator.generate(secret));
+
+    const agent = request.agent(app);
+    await agent.post('/auth/local/login').type('form').send({ username: 'alice', password: 'pass1234' });
+
+    // TOTP フロー開始後にユーザーを無効化
+    await users.updateUser(u.id, { enabled: false });
+
+    const res = await agent.post('/auth/totp/verify').type('form').send({ token: authenticator.generate(secret) });
+    expect(res.headers.location).toBe('/login');
+  });
 });

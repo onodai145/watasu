@@ -19,25 +19,23 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.3",
+    "@hono/session": "^0.2.0",
     "@prisma/client": "^6.0.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "express-rate-limit": "^8.5.2",
-    "express-session": "^1.18.0",
-    "helmet": "^8.1.0",
+    "hono": "^4.12.21",
+    "hono-rate-limiter": "^0.5.3",
+    "jose": "^6.2.3",
     "openid-client": "^5.7.1",
     "otplib": "^12.0.1",
     "pino": "^9.0.0",
-    "pino-http": "^10.0.0",
     "qrcode": "^1.5.4",
     "tsx": "^4.19.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/express": "^5.0.0",
-    "@types/express-session": "^1.18.0",
     "@types/node": "^22.0.0",
     "@types/qrcode": "^1.5.5",
     "@types/supertest": "^6.0.0",
@@ -50,6 +48,8 @@
     "vitest": "^3.0.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@prisma/client"]
+    "onlyBuiltDependencies": [
+      "@prisma/client"
+    ]
   }
 }
