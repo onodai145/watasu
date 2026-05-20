@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watasu</title>
+  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');</script>
+</head>
+<body>
+  <header>
+    <a href="/" class="logo" style="text-decoration:none;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+        <polyline points="13 2 13 9 20 9"/>
+        <line x1="12" y1="13" x2="12" y2="19"/>
+        <polyline points="9 16 12 19 15 16"/>
+      </svg>
+      Watasu
+    </a>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button id="theme-toggle-btn" class="btn-icon theme-toggle" title="テーマ切替"></button>
+      <div id="auth-area"></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Home: send or receive -->
+    <div id="view-home">
+      <div class="cards">
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon card-icon--send">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+              </svg>
+            </div>
+            <div>
+              <h2>送信する</h2>
+              <p class="card-desc">ルームを作成してリンクを共有</p>
+            </div>
+          </div>
+          <div id="send-auth-ui"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon card-icon--recv">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+              </svg>
+            </div>
+            <div>
+              <h2>受信する</h2>
+              <p class="card-desc">アカウント不要・ルームIDを入力</p>
+            </div>
+          </div>
+          <div class="join-row">
+            <input id="room-input" type="text" placeholder="ABCDEF" maxlength="6" autocomplete="off" spellcheck="false">
+            <button id="btn-join" class="btn btn-secondary">参加</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Waiting: sender waiting for receiver -->
+    <div id="view-wait" class="hidden">
+      <div class="panel">
+        <p id="wait-label" class="wait-label">受信者を待っています</p>
+        <div class="share-section">
+          <p class="share-hint">このリンクを受信者に共有してください</p>
+          <div class="share-box">
+            <span id="share-link-text" class="share-link"></span>
+            <button id="btn-copy-link" class="btn btn-icon" title="コピー">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+          </div>
+          <div class="room-id-row">
+            <span class="text-muted">ルームID:</span>
+            <strong id="room-id-display" class="room-id-val"></strong>
+          </div>
+        </div>
+        <div class="spinner-wrap"><div class="spinner"></div></div>
+        <button id="btn-cancel-wait" class="btn btn-ghost">キャンセル</button>
+      </div>
+    </div>
+
+    <!-- Transfer: connected, file exchange -->
+    <div id="view-transfer" class="hidden">
+      <div class="transfer-bar">
+        <span class="connected-badge">接続済み</span>
+        <button id="btn-disconnect" class="btn btn-ghost btn-sm">切断</button>
+      </div>
+
+      <!-- Send area (senders only) -->
+      <div id="send-area" class="section hidden">
+        <h2 class="section-title">送信</h2>
+        <div id="drop-zone" class="drop-zone">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <p>ここにファイルをドロップ</p>
+          <label class="btn btn-secondary">
+            ファイルを選択
+            <input id="file-input" type="file" hidden>
+          </label>
+        </div>
+        <div id="send-progress-wrap" class="progress-wrap hidden">
+          <div class="file-info-row">
+            <span id="send-filename" class="send-filename"></span>
+            <span id="send-percent" class="send-pct">0%</span>
+          </div>
+          <div class="progress-bar"><div id="send-bar" class="progress-fill"></div></div>
+          <p id="send-speed" class="speed-label"></p>
+        </div>
+      </div>
+
+      <!-- Receive area (always shown) -->
+      <div class="section">
+        <h2 class="section-title">受信</h2>
+        <div id="received-list" class="received-list">
+          <p class="empty-msg">ファイルの受信を待っています...</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <footer class="app-footer">
+    <span>Watasu</span>
+    <span class="footer-sep">|</span>
+    <span>ファイルはサーバーを経由しません</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - app-data:/app/data
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+
+  # PostgreSQL を使う場合は以下のコメントを外して .env で DB_CLIENT=pg を設定
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: ${DB_USER:-p2p}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD:?required}
+  #     POSTGRES_DB: ${DB_NAME:-p2p}
+  #   volumes:
+  #     - pg-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-p2p}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  app-data:
+  # pg-data:
