@@ -2,6 +2,7 @@ import path from 'path'
 import { readFileSync } from 'fs'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
+import { Prisma } from '@prisma/client'
 import logger from '../logger'
 import * as users from '../users'
 import oidc from '../oidc'
@@ -128,9 +129,9 @@ router.post('/auth/register', async (c) => {
     logger.info({ username: user.username }, 'auth: registered')
     return c.json({ ok: true })
   } catch (err) {
-    const msg = (err as Error).message
-    if (msg.includes('UNIQUE') || msg.includes('already exists'))
-      return c.json({ error: 'このユーザー名は既に使われています' }, 409)
+    const isDuplicate = (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')
+      || (err instanceof Error && (err.message.includes('UNIQUE') || (err as { code?: string }).code === '23505'))
+    if (isDuplicate) return c.json({ error: 'このユーザー名は既に使われています' }, 409)
     logger.error({ err }, 'auth: register failed')
     return c.json({ error: 'サーバーエラーが発生しました' }, 500)
   }
