@@ -47,7 +47,7 @@ WebRTC P2P ファイル転送アプリ。ファイルデータはサーバーを
 3. `server/ws.ts` — WebSocket シグナリングサーバー。`server/session.ts` の `getSessionFromRequest` で JWE Cookie を復号してセッションを共有
 
 **ルーター** (`server/routes/`):
-- `auth.ts` — OIDC フロー (`/auth/login`, `/auth/callback`, `/auth/logout`) + ローカルログイン (`POST /auth/local/login`) + TOTP 認証 (`/auth/totp/verify`) + 初回セットアップ (`/setup`) — 認証系 GET ルートはすべて `public/spa/index.html` を配信
+- `auth.ts` — OIDC フロー (`/auth/login`, `/auth/callback`, `/auth/logout`) + ローカルログイン (`POST /auth/local/login`) + TOTP 認証 (`/auth/totp/verify`) + 初回セットアップ (`/setup`) + 自己登録 (`GET|POST /auth/register`、`ALLOW_REGISTRATION=true` 時のみ有効) — 認証系 GET ルートはすべて `public/spa/index.html` を配信
 - `api.ts` — `/api/me`（自分のプロフィール更新）、`/api/ice-servers`（WebRTC ICE 設定）、TOTP セットアップ
 - `admin.ts` — `GET /admin`（`requireAdmin` 後に SPA を配信）とユーザー管理 CRUD API（admin 限定）
 
@@ -81,4 +81,4 @@ SPA 移行後、HTML の内容チェックは `<div id="app">` の存在確認�
 
 ## 主要な環境変数
 
-実行前に `.env.example` を `.env` にコピーする。最低限必要なのは `SESSION_SECRET`（本番では必ず変更）。OIDC は任意 — `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` を省略すると OIDC が無効になる。リバースプロキシの背後に置く場合は `TRUST_PROXY` を設定する（レートリミッターのクライアント IP 検出に影響）。
+実行前に `.env.example` を `.env` にコピーする。最低限必要なのは `SESSION_SECRET`（本番では必ず変更）。OIDC は任意 — `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` を省略すると OIDC が無効になる。リバースプロキシの背後に置く場合は `TRUST_PROXY` を設定する（レートリミッターのクライアント IP 検出に影響）。自己登録を有効にするには `ALLOW_REGISTRATION=true` を設定し、必要に応じて `ALLOWED_EMAIL_DOMAINS` でドメインを制限する。
