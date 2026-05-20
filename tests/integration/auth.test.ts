@@ -143,3 +143,76 @@ describe('TOTP ログインフロー', () => {
     expect(res.headers.location).toBe('/login');
   });
 });
+
+// ── 自己登録 ─────────────────────────────────────────────────────────────────
+describe('POST /auth/register', () => {
+  const valid = { username: 'newuser', email: 'newuser@example.com', password: 'pass1234' };
+
+  describe('ALLOW_REGISTRATION=true のとき', () => {
+    beforeEach(() => { process.env.ALLOW_REGISTRATION = 'true' });
+    afterEach(() => { delete process.env.ALLOW_REGISTRATION });
+
+    it('正常登録で 200 を返す', async () => {
+      const res = await request(app).post('/auth/register').send(valid);
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+    });
+
+    it('登録後にセッションが確立される', async () => {
+      const agent = request.agent(app);
+      await agent.post('/auth/register').send(valid);
+      const me = await agent.get('/api/me');
+      expect(me.body.authenticated).toBe(true);
+      expect(me.body.user.name).toBe('newuser');
+    });
+
+    it('項目不足は 400', async () => {
+      const res = await request(app).post('/auth/register').send({ username: 'a', password: 'pass1234' });
+      expect(res.status).toBe(400);
+    });
+
+    it('メール形式不正は 400', async () => {
+      const res = await request(app).post('/auth/register').send({ ...valid, email: 'not-an-email' });
+      expect(res.status).toBe(400);
+    });
+
+    it('パスワード短すぎは 400', async () => {
+      const res = await request(app).post('/auth/register').send({ ...valid, password: 'abc' });
+      expect(res.status).toBe(400);
+    });
+
+    it('ユーザー名重複は 409', async () => {
+      await request(app).post('/auth/register').send(valid);
+      const res = await request(app).post('/auth/register').send(valid);
+      expect(res.status).toBe(409);
+    });
+
+    it('許可ドメイン外は 400', async () => {
+      process.env.ALLOWED_EMAIL_DOMAINS = 'allowed.com';
+      const res = await request(app).post('/auth/register').send({ ...valid, email: 'user@other.com' });
+      expect(res.status).toBe(400);
+      delete process.env.ALLOWED_EMAIL_DOMAINS;
+    });
+
+    it('許可ドメインは大文字小文字を区別しない', async () => {
+      process.env.ALLOWED_EMAIL_DOMAINS = 'example.com';
+      const res = await request(app).post('/auth/register').send({ ...valid, email: 'user@EXAMPLE.COM' });
+      expect(res.status).toBe(200);
+      delete process.env.ALLOWED_EMAIL_DOMAINS;
+    });
+  });
+
+  describe('ALLOW_REGISTRATION 未設定のとき', () => {
+    it('登録は 403', async () => {
+      const res = await request(app).post('/auth/register').send(valid);
+      expect(res.status).toBe(403);
+    });
+
+    it('ALLOW_REGISTRATION=false も 403', async () => {
+      process.env.ALLOW_REGISTRATION = 'false';
+      const res = await request(app).post('/auth/register').send(valid);
+      expect(res.status).toBe(403);
+      delete process.env.ALLOW_REGISTRATION;
+    });
+  });
+});
