@@ -55,7 +55,7 @@ WebRTC P2P ファイル転送アプリ。ファイルデータはサーバーを
 
 **認証モデル:**
 - ローカルユーザー: bcrypt パスワード + 任意の TOTP（otplib）。`server/users.ts` の `safeUser()` が `password_hash`・`totp_secret` を返却オブジェクトから除去する。
-- OIDC ユーザー: セッションのみ・DB レコードなし — TOTP やプロフィール変更は不可。
+- OIDC ユーザー: 初回ログイン時に JIT プロビジョニングで DB レコードを自動作成（`oidc_sub` で識別）。DB が空のとき最初の OIDC ユーザーは `admin` になる。TOTP・パスワード変更は不可。
 - ロールは `user`（WebSocket で送信可能）と `admin`（ユーザー管理）の 2 種類。
 - セッションは `@hono/session`（JWE 暗号化 Cookie + サーバーサイド Map ストア）で管理。`server/session.ts` に型・ストア・WebSocket 用復号ヘルパーをまとめている。
 

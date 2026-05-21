@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client'
 import logger from '../logger'
 import * as users from '../users'
 import oidc from '../oidc'
-import type { AppEnv, OurSessionData } from '../session'
+import type { AppEnv } from '../session'
 
 const SPA_PAGE = path.join(__dirname, '../../public/spa/index.html')
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000'
@@ -38,14 +38,23 @@ router.get('/auth/callback', async (c) => {
     const params   = oidc.client.callbackParams(c.req.url)
     const tokenSet = await oidc.client.callback(`${BASE_URL}/auth/callback`, params, { state, nonce })
     const claims   = tokenSet.claims()
-    const userData: OurSessionData['user'] = {
-      sub:     claims.sub,
-      name:    (claims['name'] ?? claims['preferred_username'] ?? claims.email ?? claims.sub) as string,
-      email:   claims.email ?? null,
-      picture: (claims['picture'] ?? null) as string | null,
+    const name     = (claims['name'] ?? claims['preferred_username'] ?? claims.email ?? claims.sub) as string
+    const dbUser   = await users.findOrCreateOidcUser({ sub: claims.sub, name, email: claims.email ?? null })
+    if (!dbUser.enabled) {
+      logger.warn({ sub: claims.sub }, 'auth: oidc user disabled')
+      return c.redirect('/login?auth_error=1')
     }
-    await c.var.session.update({ user: userData, idToken: tokenSet.id_token })
-    logger.info({ sub: claims.sub, email: claims.email }, 'auth: oidc login')
+    await c.var.session.update({
+      user: {
+        sub:     `oidc:${dbUser.id}`,
+        name:    dbUser.display_name,
+        email:   dbUser.email,
+        picture: (claims['picture'] ?? null) as string | null,
+        role:    dbUser.role,
+      },
+      idToken: tokenSet.id_token,
+    })
+    logger.info({ sub: claims.sub, email: claims.email, role: dbUser.role }, 'auth: oidc login')
     return c.redirect('/')
   } catch (err) {
     logger.warn({ err: (err as Error).message }, 'auth: oidc callback failed')

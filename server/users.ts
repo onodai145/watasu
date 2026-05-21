@@ -16,6 +16,7 @@ export const VALID_ROLES = ['user', 'admin'] as const
 const safeSelect = {
   id: true, username: true, display_name: true, email: true,
   role: true, enabled: true, totp_enabled: true, created_at: true,
+  oidc_sub: true,
 } as const
 
 export async function listUsers(): Promise<SafeUser[]> {
@@ -122,6 +123,29 @@ export async function disableTotp(id: string, token: string): Promise<void> {
   if (!authenticator.verify({ token, secret: user.totp_secret! }))
     throw new UserError('コードが正しくありません')
   await prisma.user.update({ where: { id }, data: { totp_secret: null, totp_enabled: false } })
+}
+
+export async function findOrCreateOidcUser(params: {
+  sub: string
+  name: string
+  email: string | null
+}): Promise<SafeUser> {
+  const existing = await prisma.user.findUnique({ where: { oidc_sub: params.sub }, select: safeSelect })
+  if (existing) return existing
+  const isFirstUser = (await prisma.user.count()) === 0
+  return prisma.user.create({
+    data: {
+      id:           crypto.randomUUID(),
+      username:     `oidc:${params.sub}`,
+      display_name: params.name,
+      email:        params.email,
+      oidc_sub:     params.sub,
+      role:         isFirstUser ? 'admin' : 'user',
+      enabled:      true,
+      created_at:   new Date(),
+    },
+    select: safeSelect,
+  })
 }
 
 export async function verifyTotpToken(userId: string, token: string): Promise<boolean> {
