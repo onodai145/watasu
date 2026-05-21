@@ -63,13 +63,9 @@ router.get('/auth/callback', async (c) => {
 })
 
 router.get('/auth/logout', async (c) => {
-  const data    = await c.var.session.get()
-  const idToken = data?.idToken as string | undefined
+  const data = await c.var.session.get()
   logger.info({ user: data?.user?.name }, 'auth: logout')
   c.var.session.delete()
-  if (oidc.client?.issuer.end_session_endpoint && idToken) {
-    return c.redirect(oidc.client.endSessionUrl({ post_logout_redirect_uri: BASE_URL, id_token_hint: idToken }))
-  }
   return c.redirect('/')
 })
 
