@@ -168,3 +168,44 @@ describe('TOTP', () => {
     expect(await users.verifyTotpToken(u.id, token)).toBe(false);
   });
 });
+
+// ── findOrCreateOidcUser ────────────────────────────────────────────────────
+describe('findOrCreateOidcUser', () => {
+  const params = { sub: 'oidc-sub-123', name: 'Alice', email: 'alice@example.com' };
+
+  it('初回ログインでユーザーを作成する', async () => {
+    const user = await users.findOrCreateOidcUser(params);
+    expect(user.display_name).toBe('Alice');
+    expect(user.email).toBe('alice@example.com');
+    expect(user.enabled).toBe(true);
+  });
+
+  it('DB が空のとき最初の OIDC ユーザーは admin になる', async () => {
+    const user = await users.findOrCreateOidcUser(params);
+    expect(user.role).toBe('admin');
+  });
+
+  it('既存ユーザーがいるときは user ロールで作成される', async () => {
+    await users.createUser({ username: 'existing', password: 'pass1234' });
+    const user = await users.findOrCreateOidcUser(params);
+    expect(user.role).toBe('user');
+  });
+
+  it('2回目のログインは既存ユーザーを返す', async () => {
+    const first  = await users.findOrCreateOidcUser(params);
+    const second = await users.findOrCreateOidcUser(params);
+    expect(second.id).toBe(first.id);
+  });
+
+  it('表示名が変わったらログイン時に更新される', async () => {
+    await users.findOrCreateOidcUser(params);
+    const updated = await users.findOrCreateOidcUser({ ...params, name: 'Alice Updated' });
+    expect(updated.display_name).toBe('Alice Updated');
+  });
+
+  it('メールが変わったらログイン時に更新される', async () => {
+    await users.findOrCreateOidcUser(params);
+    const updated = await users.findOrCreateOidcUser({ ...params, email: 'new@example.com' });
+    expect(updated.email).toBe('new@example.com');
+  });
+});
