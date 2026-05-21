@@ -3,29 +3,35 @@
 import { readFileSync, writeFileSync } from 'fs'
 import { parse } from 'dotenv'
 
-let url = process.env.DATABASE_URL
-if (!url) {
-  try {
-    const env = parse(readFileSync('.env', 'utf-8'))
-    url = env.DATABASE_URL
-  } catch {
-    // .env がない場合は SQLite をデフォルトとする
+let envVars = {}
+try {
+  envVars = parse(readFileSync('.env', 'utf-8'))
+} catch { /* .env がない場合は無視 */ }
+
+const url = process.env.DATABASE_URL ?? envVars['DATABASE_URL']
+
+let provider
+let displayUrl
+
+if (url?.startsWith('postgresql://') || url?.startsWith('postgres://')) {
+  provider   = 'postgresql'
+  displayUrl = url
+} else if (url?.startsWith('mysql://')) {
+  provider   = 'mysql'
+  displayUrl = url
+} else {
+  // デフォルト: SQLite
+  provider   = 'sqlite'
+  displayUrl = 'data/app.db'
+  if (!process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = 'file:../data/app.db'
   }
 }
-url ??= 'file:./data/app.db'
 
-const provider =
-  url.startsWith('postgresql://') || url.startsWith('postgres://')
-    ? 'postgresql'
-    : url.startsWith('mysql://')
-    ? 'mysql'
-    : 'sqlite'
-
-const schema = readFileSync('prisma/schema.prisma', 'utf-8')
-// datasource ブロックの provider のみ更新（generator client の provider は対象外）
+const schema  = readFileSync('prisma/schema.prisma', 'utf-8')
 const updated = schema.replace(
   /(datasource\s+\w+\s*\{[^}]*provider\s*=\s*")[^"]*"/s,
   `$1${provider}"`,
 )
 writeFileSync('prisma/schema.prisma', updated)
-console.log(`[prisma] provider → ${provider} (${url.slice(0, 30)}...)`)
+console.log(`[prisma] provider → ${provider} (${displayUrl.slice(0, 40)})`)

@@ -51,7 +51,7 @@ WebRTC P2P ファイル転送アプリ。ファイルデータはサーバーを
 - `api.ts` — `/api/me`（自分のプロフィール更新）、`/api/ice-servers`（WebRTC ICE 設定）、TOTP セットアップ
 - `admin.ts` — `GET /admin`（`requireAdmin` 後に SPA を配信）とユーザー管理 CRUD API（admin 限定）
 
-**データベース (`server/prisma.ts`):** Prisma Client（v6）を使用。`prisma/schema.prisma` でスキーマを定義。`DATABASE_URL` のプレフィックスから DB を自動判別（`file:` → SQLite、`postgresql://` → PostgreSQL、`mysql://` → MySQL）。`pnpm migrate` を実行すると `scripts/update-provider.mjs` が `schema.prisma` の `provider` を自動書き換えてから `prisma db push` を適用するため、`.env` の `DATABASE_URL` を変更して `pnpm migrate` を叩くだけで DB 切り替えが完結する。テスト時は `DATABASE_URL=file:./data/test.db` を使用し、`singleFork` モードで直列実行。
+**データベース (`server/prisma.ts`):** Prisma Client（v6）を使用。`prisma/schema.prisma` でスキーマを定義。`DATABASE_URL` のプレフィックスから DB を自動判別（`postgresql://` → PostgreSQL、`mysql://` → MySQL、未設定 → SQLite）。`pnpm migrate` を実行すると `scripts/update-provider.mjs` が `schema.prisma` の `provider` を自動書き換えてから `prisma db push` を適用するため、`DATABASE_URL` を変更して `pnpm migrate` を叩くだけで DB 切り替えが完結する。SQLite は `DATABASE_URL` 未設定で `data/app.db` を自動使用。テスト時は `DATABASE_URL=file:../data/test.db` を使用し、`singleFork` モードで直列実行。
 
 **認証モデル:**
 - ローカルユーザー: bcrypt パスワード + 任意の TOTP（otplib）。`server/users.ts` の `safeUser()` が `password_hash`・`totp_secret` を返却オブジェクトから除去する。

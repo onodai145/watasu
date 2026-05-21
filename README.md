@@ -15,7 +15,7 @@ WebRTC DataChannel によるブラウザ間 P2P ファイル転送アプリ。
 - **2段階認証 (TOTP)** — Google Authenticator などの認証アプリに対応
 - **設定パネル** — ログイン後にアバターをクリックして表示名・パスワード・TOTP を変更
 - **管理画面** — admin ロールのユーザーがユーザー CRUD・ロール変更・サーバー情報を確認
-- **マルチ DB 対応** — SQLite（デフォルト）/ PostgreSQL / MySQL を `DATABASE_URL` だけで切り替え
+- **マルチ DB 対応** — SQLite（デフォルト・設定不要）/ PostgreSQL / MySQL を `DATABASE_URL` で切り替え
 - **ICE サーバー設定** — 自前の STUN/TURN サーバーを設定可能
 
 ## 必要環境
@@ -67,7 +67,7 @@ docker compose logs -f
 ```
 
 **PostgreSQL を使う場合**  
-`docker-compose.yml` の `db` サービスのコメントを外し、`.env` の `DATABASE_URL` を書き換えるだけです：
+`docker-compose.yml` の `db` サービスのコメントを外し、`.env` に以下を設定してください：
 
 ```env
 DATABASE_URL=postgresql://p2p:password@db:5432/p2p
@@ -128,11 +128,10 @@ TRUST_PROXY=1
 
 | 変数 | 説明 | デフォルト |
 |---|---|---|
-| `DATABASE_URL` | DB 接続 URL（プレフィックスで種別を自動判別） | `file:./data/app.db` |
+| `DATABASE_URL` | DB 接続 URL（未設定なら SQLite を自動使用） | — |
 
 ```env
-# SQLite（デフォルト）
-DATABASE_URL=file:./data/app.db
+# SQLite（デフォルト）→ 設定不要。data/app.db を自動で使用
 
 # PostgreSQL
 DATABASE_URL=postgresql://user:password@localhost:5432/mydb
@@ -141,7 +140,7 @@ DATABASE_URL=postgresql://user:password@localhost:5432/mydb
 DATABASE_URL=mysql://user:password@localhost:3306/mydb
 ```
 
-URL を変更したら `pnpm migrate` を実行してスキーマを適用してください。
+`DATABASE_URL` を変更したら `pnpm migrate` を実行してスキーマを適用してください。
 
 ### OIDC（任意）
 
@@ -195,17 +194,17 @@ NODE_ENV=production LOG_FILE=logs/app.log pnpm start
 
 ## DB の切り替え
 
-`.env` の `DATABASE_URL` を書き換えて `pnpm migrate` を実行するだけで切り替えられます。
+`.env` の `DATABASE_URL` を設定して `pnpm migrate` を実行するだけで切り替えられます。
 
 ```bash
 # .env を編集
 DATABASE_URL=postgresql://user:password@localhost:5432/mydb
 
-# スキーマ適用（provider 自動検出 → prisma db push）
+# スキーマ適用（URL プレフィックスから provider を自動設定 → prisma db push）
 pnpm migrate
 ```
 
-スキーマは `prisma/schema.prisma` で管理されており、`pnpm migrate` 実行時に URL のプレフィックスから SQLite / PostgreSQL / MySQL を自動判別して `schema.prisma` の `provider` を書き換えます。
+SQLite に戻す場合は `DATABASE_URL` を削除して `pnpm migrate` を実行します。スキーマは `prisma/schema.prisma` で管理されており、`pnpm migrate` 実行時に `schema.prisma` の `provider` を自動で書き換えます。
 
 ## リバースプロキシの設定例（nginx）
 
@@ -265,7 +264,7 @@ server {
 │   ├── vite.config.ts
 │   └── tsconfig.json
 ├── scripts/
-│   └── update-provider.mjs    # DATABASE_URL から Prisma provider を自動設定
+│   └── update-provider.mjs    # DB_TYPE から Prisma provider を自動設定
 ├── public/                    # 静的ファイル
 │   ├── index.html             # メインアプリ（P2P 転送 UI）
 │   ├── app.js                 # WebRTC・UI ロジック
