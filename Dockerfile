@@ -7,8 +7,12 @@ RUN apk add --no-cache python3 make g++
 RUN corepack enable pnpm
 
 COPY package.json pnpm-lock.yaml ./
-COPY prisma ./prisma/
-RUN pnpm install --frozen-lockfile && pnpm exec prisma generate
+COPY prisma  ./prisma/
+COPY client  ./client/
+COPY public  ./public/
+RUN pnpm install --frozen-lockfile \
+ && pnpm exec prisma generate \
+ && pnpm build:ui
 
 # ---- production stage ----
 FROM node:22-alpine
@@ -19,8 +23,10 @@ RUN apk add --no-cache libgcc libstdc++ \
  && addgroup -g 1001 -S nodejs \
  && adduser  -S nodejs -u 1001
 
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules  ./node_modules
 COPY --chown=nodejs:nodejs . .
+# ビルド済み SPA でローカルの未ビルド状態を上書き
+COPY --from=builder --chown=nodejs:nodejs /app/public/spa    ./public/spa
 
 RUN mkdir -p data && chown nodejs:nodejs data
 
