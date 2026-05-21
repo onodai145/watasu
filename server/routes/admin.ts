@@ -68,17 +68,24 @@ router.get('/admin/api/me', requireAdmin, async (c) => {
   return c.json({ sub: data?.user?.sub ?? null })
 })
 
-router.get('/admin/api/server', requireAdmin, (c) =>
-  c.json({
-    db:          process.env.DB_CLIENT ?? 'better-sqlite3',
-    dbPath:      (!process.env.DB_CLIENT || process.env.DB_CLIENT === 'better-sqlite3')
-                   ? (process.env.DB_PATH ?? './data/app.db') : null,
+function getDbInfo() {
+  const url = process.env.DATABASE_URL ?? ''
+  if (url.startsWith('postgresql://') || url.startsWith('postgres://')) return { db: 'postgresql', dbPath: null }
+  if (url.startsWith('mysql://'))                                        return { db: 'mysql',      dbPath: null }
+  return { db: 'sqlite', dbPath: './data/app.db' }
+}
+
+router.get('/admin/api/server', requireAdmin, (c) => {
+  const { db, dbPath } = getDbInfo()
+  return c.json({
+    db,
+    dbPath,
     oidc:        oidc.client ? { issuer: process.env.OIDC_ISSUER } : null,
     baseUrl:     BASE_URL,
     nodeVersion: process.version,
     uptime:      Math.floor(process.uptime()),
   })
-)
+})
 
 router.get('/admin/api/users', requireAdmin, async (c) =>
   c.json(await users.listUsers())
