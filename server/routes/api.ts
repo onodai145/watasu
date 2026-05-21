@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto'
 import { Hono } from 'hono'
 import QRCode from 'qrcode'
 import logger from '../logger'
@@ -18,10 +19,17 @@ router.get('/api/ice-servers', (c) => {
     : ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']
   stunUrls.forEach(urls => servers.push({ urls }))
   if (process.env.TURN_URL) {
-    const turn: IceServer = { urls: process.env.TURN_URL.trim() }
-    if (process.env.TURN_USERNAME)   turn.username   = process.env.TURN_USERNAME
-    if (process.env.TURN_CREDENTIAL) turn.credential = process.env.TURN_CREDENTIAL
-    servers.push(turn)
+    const secret = process.env.TURN_SECRET
+    if (secret) {
+      // TURN REST API: 時刻ベースの認証情報を動的生成
+      const expires  = Math.floor(Date.now() / 1000) + 24 * 60 * 60
+      const username = `${expires}:watasu`
+      const credential = createHmac('sha1', secret).update(username).digest('base64')
+      servers.push({ urls: process.env.TURN_URL.trim(), username, credential })
+    } else if (process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+      // フォールバック: 静的認証情報
+      servers.push({ urls: process.env.TURN_URL.trim(), username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL })
+    }
   }
   return c.json(servers)
 })
