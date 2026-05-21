@@ -131,7 +131,16 @@ export async function findOrCreateOidcUser(params: {
   email: string | null
 }): Promise<SafeUser> {
   const existing = await prisma.user.findUnique({ where: { oidc_sub: params.sub }, select: safeSelect })
-  if (existing) return existing
+  if (existing) {
+    if (existing.display_name !== params.name || existing.email !== params.email) {
+      return prisma.user.update({
+        where: { oidc_sub: params.sub },
+        data: { display_name: params.name, email: params.email },
+        select: safeSelect,
+      })
+    }
+    return existing
+  }
   const isFirstUser = (await prisma.user.count()) === 0
   return prisma.user.create({
     data: {
