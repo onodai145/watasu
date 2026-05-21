@@ -15,6 +15,7 @@ FROM node:22-alpine
 WORKDIR /app
 
 RUN apk add --no-cache libgcc libstdc++ \
+ && corepack enable pnpm \
  && addgroup -g 1001 -S nodejs \
  && adduser  -S nodejs -u 1001
 
@@ -33,4 +34,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD wget -qO- http://localhost:3000/health || exit 1
 
-CMD ["sh", "-c", "pnpm migrate && tsx server/index.ts"]
+CMD ["sh", "-c", "pnpm migrate && pnpm start"]
