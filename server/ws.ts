@@ -23,6 +23,11 @@ export function setupWS(server: Server, secret: string): void {
     ws.roomId = null
     ws.role   = null
 
+    // Keep the connection alive through proxies that close idle WebSocket connections
+    const heartbeat = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) ws.ping()
+    }, 30_000)
+
     ws.on('message', (raw) => {
       if ((raw as Buffer).byteLength > 64 * 1024) {
         ws.send(JSON.stringify({ type: 'error', code: 'message_too_large', message: 'メッセージが大きすぎます' }))
@@ -68,6 +73,7 @@ export function setupWS(server: Server, secret: string): void {
     })
 
     ws.on('close', () => {
+      clearInterval(heartbeat)
       if (!ws.roomId) return
       const roomSet = rooms.get(ws.roomId)
       if (roomSet) {

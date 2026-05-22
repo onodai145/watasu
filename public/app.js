@@ -196,7 +196,8 @@
     ws.addEventListener('open', onOpen, { once: true });
     ws.addEventListener('message', onWsMessage);
     ws.addEventListener('close', () => {
-      if (pc) {
+      // If WebRTC is already connected, the WebSocket is no longer needed — don't reset
+      if (pc && pc.connectionState !== 'connected') {
         showToast('接続が切れました', 'error');
         reset();
       }
@@ -368,6 +369,7 @@
 
     reader.onload = (e) => {
       function trySend() {
+        if (!dataChannel || dataChannel.readyState !== 'open') return;
         if (dataChannel.bufferedAmount > CHUNK_SIZE * 8) {
           setTimeout(trySend, 10);
           return;
