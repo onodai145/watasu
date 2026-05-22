@@ -229,6 +229,8 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade    $http_upgrade;
         proxy_set_header Connection "upgrade";
+        # サーバーは30秒ごとにpingを送りコネクションを維持する。
+        # proxy_read_timeout はファイル転送中の長時間セッションに備えて十分な値を設定する。
         proxy_read_timeout 3600s;
     }
 }

@@ -59,7 +59,7 @@ WebRTC P2P ファイル転送アプリ。ファイルデータはサーバーを
 - ロールは `user`（WebSocket で送信可能）と `admin`（ユーザー管理）の 2 種類。
 - セッションは `@hono/session`（JWE 暗号化 Cookie + サーバーサイド Map ストア）で管理。`server/session.ts` に型・ストア・WebSocket 用復号ヘルパーをまとめている。
 
-**WebSocket シグナリング (`server/ws.ts`):** ルームベース（1ルーム最大 2 ピア）。`sender` ロールには有効なセッションが必要、`receiver` は匿名可。`offer`・`answer`・`ice` メッセージをピア間でリレーする。空になったルームは削除される。
+**WebSocket シグナリング (`server/ws.ts`):** ルームベース（1ルーム最大 2 ピア）。`sender` ロールには有効なセッションが必要、`receiver` は匿名可。`offer`・`answer`・`ice` メッセージをピア間でリレーする。空になったルームは削除される。接続ごとに 30 秒間隔で `ws.ping()` を送りプロキシのアイドルタイムアウトによる切断を防ぐ。
 
 **フロントエンド構成:**
 - `public/index.html` + `public/app.js` — メインの P2P 転送 UI（バニラ JS、変更なし）
