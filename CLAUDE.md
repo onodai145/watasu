@@ -79,6 +79,15 @@ SPA 移行後、HTML の内容チェックは `<div id="app">` の存在確認�
 
 `server/index.ts` はサーバー起動の副作用のみを含むためカバレッジ対象から除外されている。vitest は TypeScript ファイルをネイティブに処理するため、別途コンパイルは不要。
 
+## 開発フロー
+
+作業は GitHub Flow に従って進める。
+
+1. `main` から機能ブランチを切る（例: `feat/xxx`、`fix/yyy`）
+2. ブランチ上で変更をコミットする
+3. Pull Request を作成してレビュー・マージする
+4. 直接 `main` へのコミットは行わない
+
 ## 主要な環境変数
 
 実行前に `.env.example` を `.env` にコピーする。最低限必要なのは `SESSION_SECRET`（本番では必ず変更）。OIDC は任意 — `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` を省略すると OIDC が無効になる。リバースプロキシの背後に置く場合は `TRUST_PROXY` を設定する（レートリミッターのクライアント IP 検出に影響）。自己登録を有効にするには `ALLOW_REGISTRATION=true` を設定し、必要に応じて `ALLOWED_EMAIL_DOMAINS` でドメインを制限する。
